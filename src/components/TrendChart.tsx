@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   Box,
   Typography,
@@ -47,20 +47,8 @@ function calculateOrderStats(users?: BasicUser[]): OrderStats | undefined {
  * Enhanced inline SVG trend chart with order index statistics.
  */
 export default function TrendChart({ snaps }: { snaps: Snapshot[] }) {
-  const [viewMode, setViewMode] = useState<"trend" | "order" | "stats">(
-    "trend"
-  );
-
+  // No view mode selection needed for now
   if (!snaps.length) return null;
-
-  const handleViewChange = (
-    _event: React.MouseEvent<HTMLElement>,
-    newMode: "trend" | "order" | "stats" | null
-  ) => {
-    if (newMode !== null) {
-      setViewMode(newMode);
-    }
-  };
 
   const data = snaps.map((s) => ({
     t: new Date(s.timestamp).getTime(),

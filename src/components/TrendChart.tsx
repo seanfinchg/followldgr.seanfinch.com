@@ -1,10 +1,5 @@
 import React from "react";
-import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-} from "@mui/material";
+import { Box, Typography, Card, CardContent } from "@mui/material";
 import type { Snapshot, BasicUser } from "../types";
 
 // Helper function to calculate order index statistics

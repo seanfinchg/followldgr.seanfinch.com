@@ -1,0 +1,51 @@
+import React from "react";
+import { CssBaseline } from "@mui/material";
+import { CssVarsProvider, extendTheme } from "@mui/material/styles";
+import { AppProvider, useAppContext } from "./context/AppContext";
+import CustomSnackbar from "./components/shared/Snackbar";
+
+import Header from "./components/Header";
+import Dashboard from "./pages/Dashboard";
+import UploadPage from "./pages/Upload";
+import type { LDGRJson } from "./types";
+
+// ===== Material You theme =====
+const theme = extendTheme({
+  colorSchemes: { light: true, dark: true },
+  shape: { borderRadius: 8 }, // Reduced from 20 to make corners less rounded
+  typography: {
+    fontFamily: `"Google Sans", "Roboto", "Helvetica", "Arial", sans-serif`,
+  },
+});
+
+export default function App() {
+  return (
+    <AppProvider>
+      <AppContent />
+    </AppProvider>
+  );
+}
+
+// The actual app content, now using the context
+function AppContent() {
+  const { ui, onDownloadMerged } = useAppContext();
+  const username = ui.dataset?.account.username;
+
+  return (
+    <CssVarsProvider theme={theme}>
+      <CssBaseline />
+
+      <Header 
+        username={username}
+        onDownloadMerged={onDownloadMerged}
+        canDownload={!!ui.dataset}
+      />
+      
+      {/* Conditional rendering based on step */}
+      {ui.step === 'upload' && <UploadPage />}
+      {ui.step === 'dashboard' && ui.dataset && <Dashboard />}
+
+      <CustomSnackbar />
+    </CssVarsProvider>
+  );
+}

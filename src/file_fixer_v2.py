@@ -1,216 +1,206 @@
 import pandas as pd
 import json
+import uuid
 from datetime import datetime
 import os
 
-def process_snapshots(csv_path='followers.csv'):
-    """
-    Process CSV data into snapshots with the same format as the snapshot JSON.
-    Only include users in subsequent snapshots if there are changes to their status.
-    """
-    print(f"Reading data from {csv_path}...")
-    data = pd.read_csv(csv_path)
-    follower_data = {}
+def generate_uuid():
+    """Generate a UUID for each user"""
+    return str(uuid.uuid4())
+
+def format_date_string(date_str):
+    """Convert date strings to ISO format"""
+    try:
+        # Parse the date string in MM/DD/YYYY format
+        date_parts = date_str.split('/')
+        if len(date_parts) != 3:
+            raise ValueError("Invalid date format")
+        
+        month = int(date_parts[0])
+        day = int(date_parts[1])
+        year = int(date_parts[2])
+        
+        # Create a datetime object and format as ISO
+        dt = datetime(year, month, day, 12, 0, 0)  # Noon on the given date
+        return dt.isoformat()
+    except Exception as e:
+        print(f"Error parsing date {date_str}: {e}")
+        # Return a fallback date if parsing fails
+        return datetime.now().isoformat()
+
+def process_csv_files(following_path='Following.csv', dont_follow_back_path='Following but Don\'t Follow Back.csv'):
+    """Process the CSV files and create a proper JSON snapshot"""
+    print(f"Reading files from:\n- {following_path}\n- {dont_follow_back_path}")
     
-    # Get column names that represent dates (excluding '.1' columns)
-    date_cols = [col for col in data.columns if '/' in col and not col.endswith('.1')]
-    date_cols.sort()  # Ensure chronological order
+    # Read the CSV files
+    following_df = pd.read_csv(following_path)
+    dont_follow_back_df = pd.read_csv(dont_follow_back_path)
     
-    # First build a dictionary to track all users and their history across snapshots
-    user_history = {}
-    # Keep track of all users we've ever seen
-    all_known_users = set()
+    # Get column headers (dates) from the Following CSV
+    date_columns = following_df.columns.tolist()
     
-    print(f"Processing {len(date_cols)} snapshots...")
-    for date_index, date in enumerate(date_cols):
-        # Get users from both columns for this date
-        following_column = date
-        followers_column = date + '.1'
-        
-        # Get users lists, handling NaN values
-        following_users = set(data[following_column].dropna())
-        dont_follow_back = set(data[followers_column].dropna())
-        
-        # In CSV format:
-        # - "following_users" = people I follow (whether they follow back or not)
-        # - "dont_follow_back" = people I follow who DON'T follow me back
-        # So to derive followers:
-        followers = following_users - dont_follow_back
-        
-        # For current snapshot, all users that are either followed by me or follow me
-        current_users = following_users.copy()
-        
-        # Find users who've disappeared since the last snapshot
-        if date_index > 0:
-            # Get all previously seen users who are not in the current snapshot
-            disappeared_users = all_known_users - current_users - dont_follow_back
-            # Add them to the processing list
-            current_users.update(disappeared_users)
-        
-        # Create snapshot entry if this is the first snapshot
-        if date_index == 0:
-            follower_data[date] = {
-                "timestamp": convert_date_to_iso(date),
-                "changed_users": []
-            }
-            
-            # First snapshot includes all users
-            for username in current_users:
-                is_following = username in following_users
-                is_follower = username in followers
-                
-                user_entry = {
-                    "username": username,
-                    "profile_url": f"https://instagram.com/{username}",
-                    "follower": is_follower,
-                    "following": is_following,
-                    "whitelisted": False,
-                    "blocked": False,
-                    "aliases": [],
-                    "uuid": generate_simple_uuid(username)
-                }
-                
-                # Store user in first snapshot
-                follower_data[date]["changed_users"].append(user_entry)
-                
-                # Update user history
-                user_history[username] = {
-                    "last_state": {
-                        "follower": is_follower,
-                        "following": is_following
-                    },
-                    "last_snapshot": date
-                }
-                
-                # Add to all known users
-                all_known_users.add(username)
-        else:
-            # For subsequent snapshots, only include users with changes
-            changed_users = []
-            
-            # Process all current users including those who may have disappeared
-            for username in current_users:
-                is_following = username in following_users
-                is_follower = username in followers
-                
-                # If a user is not in either list but we've seen them before,
-                # they've disappeared (unfollowed/removed)
-                if username not in following_users and username not in dont_follow_back:
-                    is_following = False
-                    is_follower = False
-                
-                # Check if this is a new user or if their status changed
-                is_new_user = username not in user_history
-                
-                if is_new_user:
-                    # New user that wasn't in previous snapshots
-                    user_entry = {
-                        "username": username,
-                        "profile_url": f"https://instagram.com/{username}",
-                        "follower": is_follower, 
-                        "following": is_following,
-                        "whitelisted": False,
-                        "blocked": False,
-                        "aliases": [],
-                        "uuid": generate_simple_uuid(username)
-                    }
-                    changed_users.append(user_entry)
-                    
-                    # Add to all known users
-                    all_known_users.add(username)
-                    
-                    # Update user history
-                    user_history[username] = {
-                        "last_state": {
-                            "follower": is_follower,
-                            "following": is_following
-                        },
-                        "last_snapshot": date
-                    }
-                else:
-                    # Existing user - check if status changed
-                    last_state = user_history[username]["last_state"]
-                    status_changed = (
-                        last_state["follower"] != is_follower or 
-                        last_state["following"] != is_following
-                    )
-                    
-                    if status_changed:
-                        # Create user entry
-                        user_entry = {
-                            "username": username,
-                            "profile_url": f"https://instagram.com/{username}",
-                            "uuid": generate_simple_uuid(username)
-                        }
-                        
-                        # Always include both fields when status changed
-                        # This ensures we track when users completely disappear
-                        user_entry["follower"] = is_follower
-                        user_entry["following"] = is_following
-                        
-                        changed_users.append(user_entry)
-                        
-                        # Update user history
-                        user_history[username]["last_state"] = {
-                            "follower": is_follower,
-                            "following": is_following
-                        }
-                        user_history[username]["last_snapshot"] = date
-            
-            # Only create a snapshot if there were changes
-            if changed_users:
-                follower_data[date] = {
-                    "timestamp": convert_date_to_iso(date),
-                    "changed_users": changed_users
-                }
+    # Convert date columns to datetime objects for sorting
+    date_objects = [(col, datetime.strptime(col, '%m/%d/%Y')) for col in date_columns]
     
-    # Convert to the expected output format
-    output = {
+    # Sort date columns chronologically
+    date_objects.sort(key=lambda x: x[1])
+    sorted_date_columns = [date_col for date_col, _ in date_objects]
+    print(f"Found {len(sorted_date_columns)} date columns, sorted chronologically:")
+    for date_col in sorted_date_columns:
+        print(f"  - {date_col}")
+    
+    # Initialize the result structure
+    result = {
         "account": {
-            "username": "straight.up.sean",
+            "username": "straight.up.sean",  # Hardcoded as mentioned in merge.ts
             "full_name": "",
             "profile_url": "https://instagram.com/straight.up.sean"
         },
-        "snapshots": [
-            {
-                "timestamp": follower_data[date]["timestamp"],
-                "changed_users": follower_data[date]["changed_users"]
-            } for date in date_cols if date in follower_data
-        ],
+        "snapshots": [],
+        "enriched_at": datetime.now().isoformat(),
         "schema": {
             "version": 1
-        },
-        "enriched_at": datetime.now().isoformat()
+        }
     }
     
-    print(f"Writing output to output.json...")
-    with open("output.json", 'w', encoding='utf-8') as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
+    # Process each date column as a separate snapshot (in chronological order)
+    for date_col in sorted_date_columns:
+        # Convert the date string to ISO format
+        iso_date = format_date_string(date_col)
+        
+        # Create a new snapshot for this date
+        snapshot = {
+            "timestamp": iso_date,
+            "changed_users": []
+        }
+        
+        # First, collect all users from both files
+        following_users = set(following_df[date_col].dropna().str.strip())
+        dont_follow_back_users = set(dont_follow_back_df[date_col].dropna().str.strip())
+        
+        # Create a consolidated set of all users (union)
+        all_users = following_users.union(dont_follow_back_users)
+        
+        # Keep track of user count for order_index
+        user_count = 0
+        
+        # Process each user according to their presence in each file
+        for user in all_users:
+            user_clean = user.strip()
+            
+            # Determine follower/following status
+            is_in_following = user_clean in following_users
+            is_in_dont_follow_back = user_clean in dont_follow_back_users
+            
+            # Determine correct follower status
+            # If in don't_follow_back, they don't follow you (regardless of being in following)
+            follower = not is_in_dont_follow_back
+            
+            # Everyone in either list is someone you follow
+            following = True
+            
+            # If there's a conflict (user in both files), log it
+            if is_in_following and is_in_dont_follow_back:
+                print(f"Warning: User '{user_clean}' is in both files for date {date_col}. "
+                      f"Setting follower={follower}")
+            
+            # Add to the snapshot
+            snapshot["changed_users"].append({
+                "username": user_clean,
+                "profile_url": f"https://instagram.com/{user_clean}",
+                "follower": follower,
+                "following": following,
+                "is_verified": False,  # Default values
+                "is_private": False,  # Default values
+                "whitelisted": False,
+                "blocked": False,
+                "aliases": [],
+                "order_index": user_count,
+                "uuid": generate_uuid()
+            })
+            user_count += 1
+        
+        print(f"Date {date_col}: Processed {len(snapshot['changed_users'])} users")
+        
+        # Add the snapshot to the result
+        result["snapshots"].append(snapshot)
     
-    print(f"Processing complete. Generated {len(output['snapshots'])} snapshots with change data.")
-    print(f"Tracked {len(all_known_users)} unique users across all snapshots.")
-    return output
+    return result
 
-def convert_date_to_iso(date_str):
-    """Convert MM/DD/YYYY format to ISO format"""
-    parts = date_str.split('/')
-    if len(parts) != 3:
-        # Default to current time if format is invalid
-        return datetime.now().isoformat()
-    
-    month, day, year = parts
-    # Create a datetime object and convert to ISO format
-    dt = datetime(int(year), int(month), int(day), 12, 0, 0)  # Noon on the given day
-    return dt.isoformat()
+def save_json(data, filename="snapshot_output.json"):
+    """Save the data to a JSON file"""
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    print(f"JSON file saved as {filename}")
+    print(f"Full path: {os.path.abspath(filename)}")
 
-def generate_simple_uuid(username):
-    """Generate a simple deterministic UUID-like string based on username"""
-    import hashlib
-    hash_object = hashlib.md5(username.encode())
-    md5_hash = hash_object.hexdigest()
+def analyze_overlap(following_path, dont_follow_back_path):
+    """Analyze how many users are in both files for each date"""
+    following_df = pd.read_csv(following_path)
+    dont_follow_back_df = pd.read_csv(dont_follow_back_path)
     
-    # Format like UUID: 8-4-4-4-12
-    return f"{md5_hash[:8]}-{md5_hash[8:12]}-{md5_hash[12:16]}-{md5_hash[16:20]}-{md5_hash[20:32]}"
+    date_columns = following_df.columns.tolist()
+    
+    print("\nAnalyzing overlap between files:")
+    print("===============================")
+    
+    for date_col in date_columns:
+        following_users = set(following_df[date_col].dropna().str.strip())
+        dont_follow_back_users = set(dont_follow_back_df[date_col].dropna().str.strip())
+        
+        # Find users that are in both files
+        overlap = following_users.intersection(dont_follow_back_users)
+        
+        print(f"Date {date_col}:")
+        print(f"  Users in Following: {len(following_users)}")
+        print(f"  Users in Don't Follow Back: {len(dont_follow_back_users)}")
+        print(f"  Users in BOTH files: {len(overlap)}")
+        
+        if len(overlap) > 0:
+            print(f"  Example overlapping users: {', '.join(list(overlap)[:5])}")
+            if len(overlap) > 5:
+                print(f"    ...and {len(overlap) - 5} more")
+        print("")
+    
+    return len(overlap) > 0
 
 if __name__ == "__main__":
-    process_snapshots()
+    try:
+        # Set up input file paths
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        following_path = os.path.join(script_dir, "Following.csv")
+        dont_follow_back_path = os.path.join(script_dir, "Following but Don't Follow Back.csv")
+        
+        # Analyze overlap between files
+        has_overlap = analyze_overlap(following_path, dont_follow_back_path)
+        
+        if has_overlap:
+            print("WARNING: There are users that appear in both files.")
+            print("For these users, they will be marked as NOT following you back (follower=false)")
+            print("as per the 'Following but Don't Follow Back.csv' file.\n")
+            
+            response = input("Continue processing? (y/n): ")
+            if response.lower() not in ["y", "yes"]:
+                print("Processing cancelled.")
+                exit(0)
+                
+        # Process the CSV files
+        json_data = process_csv_files(following_path, dont_follow_back_path)
+        
+        # Generate output filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_filename = os.path.join(script_dir, f"snapshot_output_{timestamp}.json")
+        
+        # Save the result to a JSON file
+        save_json(json_data, output_filename)
+        
+        # Print some stats
+        print(f"\nSummary:")
+        print(f"Processed {len(json_data['snapshots'])} snapshots.")
+        total_users = sum(len(snapshot['changed_users']) for snapshot in json_data['snapshots'])
+        print(f"Total user records: {total_users}")
+        print("\nUse this file to upload to the website for merging.")
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()

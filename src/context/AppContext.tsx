@@ -38,6 +38,18 @@ interface AppContextType {
   onDownloadMerged: () => LDGRJson | undefined;
   handleBaseSnapshotChange: (index: number) => void;
   handleCompareSnapshotChange: (index: number) => void;
+  // File uploads
+  fileUpload: {
+    pendingFiles: File[];
+    uploadedFiles: string[];
+    uploading: boolean;
+    baseFile: File | null;
+    handleFileSelection: (files: FileList | null) => void;
+    handleRemoveFile: (fileName: string) => void;
+    handleMarkAsBase: (file: File) => void;
+    readJson: (file: File) => Promise<LDGRJson>;
+    normalizeSnapshot: (json: LDGRJson) => LDGRJson;
+  };
   // Notifications
   snack: {
     open: boolean;
@@ -80,6 +92,21 @@ const AppContext = createContext<AppContextType>({
   onDownloadMerged: () => undefined,
   handleBaseSnapshotChange: () => {},
   handleCompareSnapshotChange: () => {},
+  // File upload defaults
+  fileUpload: {
+    pendingFiles: [],
+    uploadedFiles: [],
+    uploading: false,
+    baseFile: null,
+    handleFileSelection: () => {},
+    handleRemoveFile: () => {},
+    handleMarkAsBase: () => {},
+    readJson: async () => ({
+      account: { username: "", profile_url: "" },
+      snapshots: [],
+    }),
+    normalizeSnapshot: (json) => json,
+  },
   // Default snack values
   snack: { open: false, msg: "", severity: "success" },
   showSnack: () => {},
@@ -99,12 +126,109 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     severity: "success" | "info" | "error";
   }>({ open: false, msg: "", severity: "success" });
 
+  // File upload state
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [uploading, setUploading] = useState<boolean>(false);
+  const [baseFile, setBaseFile] = useState<File | null>(null);
+
   // Load prior merged base (optional) on mount
   useEffect(() => {
     const base = loadMerged();
     if (base) {
       setUI((p) => ({ ...p, base }));
     }
+  }, []);
+
+  // File upload handlers
+  const handleFileSelection = useCallback(
+    (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+
+      // Add selected files to pending files list
+      const newPendingFiles = [...pendingFiles];
+      Array.from(files).forEach((file) => {
+        if (!pendingFiles.some((f) => f.name === file.name)) {
+          newPendingFiles.push(file);
+        }
+      });
+      setPendingFiles(newPendingFiles);
+    },
+    [pendingFiles]
+  );
+
+  const handleRemoveFile = useCallback(
+    (fileName: string) => {
+      setPendingFiles(pendingFiles.filter((f) => f.name !== fileName));
+      if (baseFile?.name === fileName) {
+        setBaseFile(null);
+      }
+    },
+    [pendingFiles, baseFile]
+  );
+
+  const handleMarkAsBase = useCallback(
+    (file: File) => {
+      if (baseFile?.name === file.name) {
+        setBaseFile(null);
+      } else {
+        setBaseFile(file);
+      }
+    },
+    [baseFile]
+  );
+
+  const readJson = useCallback((file: File): Promise<LDGRJson> => {
+    return new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => {
+        try {
+          res(JSON.parse(String(fr.result)));
+        } catch (e) {
+          rej(e);
+        }
+      };
+      fr.onerror = rej;
+      fr.readAsText(file);
+    });
+  }, []);
+
+  // Normalize snapshots to consistent format
+  const normalizeSnapshot = useCallback((json: LDGRJson): LDGRJson => {
+    const normalized = { ...json };
+
+    // Process each snapshot to convert changed_users to followers/following arrays if needed
+    normalized.snapshots = normalized.snapshots.map((snapshot) => {
+      // If the snapshot already has followers and following arrays, leave it as is
+      if (
+        snapshot.followers &&
+        snapshot.followers.length > 0 &&
+        snapshot.following &&
+        snapshot.following.length > 0
+      ) {
+        return snapshot;
+      }
+
+      // If snapshot has changed_users but no followers/following, convert it
+      if (snapshot.changed_users && snapshot.changed_users.length > 0) {
+        const followers = snapshot.changed_users.filter(
+          (user) => user.follower
+        );
+        const following = snapshot.changed_users.filter(
+          (user) => user.following
+        );
+
+        return {
+          ...snapshot,
+          followers: followers,
+          following: following,
+        };
+      }
+
+      return snapshot;
+    });
+
+    return normalized;
   }, []);
 
   // Build dataset whenever base/snapshots change (but DO NOT auto-advance step)
@@ -337,7 +461,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     onDownloadMerged,
     handleBaseSnapshotChange,
     handleCompareSnapshotChange,
-    // Add snack state and functions
+    // File upload state and handlers
+    fileUpload: {
+      pendingFiles,
+      uploadedFiles,
+      uploading,
+      baseFile,
+      handleFileSelection,
+      handleRemoveFile,
+      handleMarkAsBase,
+      readJson,
+      normalizeSnapshot,
+    },
+    // Snack state and functions
     snack,
     showSnack: (
       msg: string,
@@ -348,24 +484,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     hideSnack: () => setSnack((prev) => ({ ...prev, open: false })),
   };
 
-  return (
-    <AppContext.Provider value={value}>
-      {children}
-      {/* Snackbar is rendered here to be accessible throughout the app */}
-      <div
-        id="snackbar-container"
-        style={{
-          position: "fixed",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          zIndex: 2000,
-        }}
-      >
-        {/* We'll import the Snackbar in App.tsx */}
-      </div>
-    </AppContext.Provider>
-  );
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 
 /**
@@ -387,8 +506,7 @@ export const useUserFiltering = (
     sort: string;
   }
 ) => {
-  // Use the imported functions
-
+  // Get raw items from the selected category
   const itemsRaw = dataset ? getCategoryArray(dataset, category) : [];
 
   // Apply filters

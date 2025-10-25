@@ -6,6 +6,7 @@ import {
   useUserFiltering,
 } from "./context/AppContext";
 import CustomSnackbar from "./components/shared/Snackbar";
+import MergeModal from "./components/shared/MergeModal";
 import { GridContainer, GridItem } from "./components/shared/GridWrapper";
 
 import Header from "./components/Header";
@@ -46,6 +47,7 @@ function AppContent() {
     onDownloadMerged,
     handleBaseSnapshotChange,
     handleCompareSnapshotChange,
+    onMergeRequest,
   } = useAppContext();
 
   // Get filtered and sorted users using the useUserFiltering hook
@@ -207,10 +209,123 @@ function AppContent() {
                   category={ui.category}
                   page={ui.page}
                   pageSize={ui.pageSize}
-                  sort={ui.sort}
                   alphaHeaders={showAlphaHeaders}
                   alphaOf={(u) => getAlphaHeader(u)}
                   onToggleWhitelist={onToggleWhitelist}
+                  onMergeRequest={onMergeRequest}
+                  ranges={(() => {
+                    // produce presence intervals per user: array of { from, to? }
+                    const intervals = new Map<
+                      string,
+                      Array<{ from: string; to?: string }>
+                    >();
+                    if (!ds) return intervals;
+
+                    const snaps = ds.mergedSnapshots;
+                    if (!snaps || snaps.length === 0) return intervals;
+
+                    // Determine scanning window (inclusive)
+                    let startIdx = 0;
+                    let endIdx = snaps.length - 1;
+                    if (
+                      ui.baseSnapshotIndex !== undefined &&
+                      ui.compareSnapshotIndex !== undefined
+                    ) {
+                      startIdx = Math.min(
+                        ui.baseSnapshotIndex,
+                        ui.compareSnapshotIndex
+                      );
+                      endIdx = Math.max(
+                        ui.baseSnapshotIndex,
+                        ui.compareSnapshotIndex
+                      );
+                    }
+
+                    // helper to check presence in a snapshot depending on category
+                    const isPresent = (snapIdx: number, key: string) => {
+                      const s = snaps[snapIdx];
+                      if (!s) return false;
+                      if (
+                        ui.category === "lostFollowers" ||
+                        ui.category === "newFollowers" ||
+                        ui.category === "followers"
+                      ) {
+                        return (s.followers || []).some(
+                          (u) => u.username.toLowerCase() === key
+                        );
+                      }
+                      // following based categories
+                      return (s.following || []).some(
+                        (u) => u.username.toLowerCase() === key
+                      );
+                    };
+
+                    // build set of candidate usernames to scan
+                    const candidates = new Set<string>();
+                    if (ui.category === "lostFollowers") {
+                      if (ds.selectedComparison) {
+                        ds.selectedComparison.lostFollowers.forEach((it) =>
+                          candidates.add(it.user.username.toLowerCase())
+                        );
+                      } else {
+                        ds.lostFollowers.forEach((it) =>
+                          candidates.add(it.user.username.toLowerCase())
+                        );
+                      }
+                    } else if (ui.category === "unfollowed") {
+                      if (ds.selectedComparison) {
+                        ds.selectedComparison.unfollowed.forEach((it) =>
+                          candidates.add(it.user.username.toLowerCase())
+                        );
+                      } else {
+                        ds.unfollowed.forEach((it) =>
+                          candidates.add(it.user.username.toLowerCase())
+                        );
+                      }
+                    } else {
+                      // for other categories, include the current sorted list
+                      sorted.forEach((u) =>
+                        candidates.add(u.username.toLowerCase())
+                      );
+                    }
+
+                    // For each candidate, scan snapshots in window and build presence intervals
+                    for (const key of candidates) {
+                      const userIntervals: Array<{
+                        from: string;
+                        to?: string;
+                      }> = [];
+                      let inInterval = false;
+                      let currentFrom = "";
+
+                      for (let i = startIdx; i <= endIdx; i++) {
+                        const present = isPresent(i, key);
+                        if (present && !inInterval) {
+                          // start new interval at this snapshot
+                          inInterval = true;
+                          currentFrom = snaps[i].timestamp;
+                        } else if (!present && inInterval) {
+                          // close interval; last present was previous snapshot
+                          userIntervals.push({
+                            from: currentFrom,
+                            to: snaps[i - 1].timestamp,
+                          });
+                          inInterval = false;
+                          currentFrom = "";
+                        }
+                      }
+
+                      // if still in interval at end, push with undefined 'to' (means still present)
+                      if (inInterval) {
+                        userIntervals.push({ from: currentFrom });
+                      }
+
+                      if (userIntervals.length > 0)
+                        intervals.set(key, userIntervals);
+                    }
+
+                    return intervals;
+                  })()}
                 />
               </GridItem>
             </GridContainer>
@@ -219,6 +334,7 @@ function AppContent() {
       )}
 
       <CustomSnackbar />
+      <MergeModal />
     </CssVarsProvider>
   );
 }

@@ -1,5 +1,5 @@
 import React from "react";
-import type { BasicUser, CategoryKey, LDGRJson, SortMode } from "../types";
+import type { BasicUser, CategoryKey } from "../types";
 import UserCard from "./UserCard";
 import { paginate } from "../lib/utils";
 import { Box } from "@mui/material";
@@ -9,12 +9,11 @@ type Props = {
   category: CategoryKey;
   page: number;
   pageSize: number;
-  sort: SortMode;
   alphaHeaders: boolean;
   alphaOf: (u: BasicUser) => string;
   onToggleWhitelist: (u: BasicUser) => void;
   onMergeRequest?: (u: BasicUser) => void;
-  ranges?: Map<string, { from?: string; to?: string }>;
+  ranges?: Map<string, Array<{ from: string; to?: string }>>;
 };
 
 export default function UserList({
@@ -22,7 +21,6 @@ export default function UserList({
   category,
   page,
   pageSize,
-  sort,
   alphaHeaders,
   alphaOf,
   onToggleWhitelist,
@@ -54,7 +52,7 @@ export default function UserList({
               category={category}
               onToggleWhitelist={onToggleWhitelist}
               onMergeRequest={onMergeRequest}
-              range={ranges?.get(u.username.toLowerCase())}
+              ranges={ranges?.get(u.username.toLowerCase())}
             />
           </React.Fragment>
         );

@@ -19,6 +19,7 @@ import {
   HighlightOff,
   AccessTime,
   Insights,
+  MergeType,
 } from "@mui/icons-material";
 import type { BasicUser, CategoryKey } from "../types";
 
@@ -28,7 +29,7 @@ type Props = {
   category: CategoryKey;
   onToggleWhitelist: (u: BasicUser) => void;
   onMergeRequest?: (u: BasicUser) => void;
-  range?: { from?: string; to?: string };
+  ranges?: Array<{ from: string; to?: string }>;
 };
 
 /**
@@ -76,7 +77,7 @@ export default function UserCard({
   category,
   onToggleWhitelist,
   onMergeRequest,
-  range,
+  ranges,
 }: Props) {
   // Action logic
   const canWhitelist =
@@ -121,8 +122,15 @@ export default function UserCard({
     });
   }
 
-  const handleAction = (actionLabel: string) => {
-    // Open profile in a new tab for action
+  // Merge action available on all categories
+  actions.push({
+    label: "Merge",
+    icon: <MergeType fontSize="small" />,
+    color: "primary",
+  });
+
+  // Open profile in a new tab
+  const openProfile = () => {
     const url = user.profile_url || `https://instagram.com/${user.username}`;
     window.open(url, "_blank");
   };
@@ -156,15 +164,61 @@ export default function UserCard({
             />
           </Tooltip>
         )}
+
+        {/* Show presence intervals (clear): each interval shows start — end (or 'Present' if to is undefined) */}
+        {ranges && ranges.length > 0 && (
+          <Box
+            sx={{
+              display: "flex",
+              gap: 1,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            {ranges.map((interval, i) => (
+              <Tooltip
+                key={i}
+                title={`Present from ${new Date(
+                  interval.from
+                ).toLocaleString()}${
+                  interval.to
+                    ? ` to ${new Date(interval.to).toLocaleString()}`
+                    : " (still present)"
+                }`}
+              >
+                <Chip
+                  size="small"
+                  icon={<AccessTime fontSize="small" />}
+                  label={
+                    interval.to
+                      ? `${new Date(
+                          interval.from
+                        ).toLocaleDateString()} — ${new Date(
+                          interval.to
+                        ).toLocaleDateString()}`
+                      : `${new Date(
+                          interval.from
+                        ).toLocaleDateString()} — Present`
+                  }
+                  color={interval.to ? "warning" : "success"}
+                />
+              </Tooltip>
+            ))}
+          </Box>
+        )}
       </Box>
 
-      {range && (
+      {ranges && ranges.length > 0 && (
         <Typography variant="caption" color="text.secondary">
-          {range.from && range.to
-            ? `${new Date(range.from).toLocaleDateString()} - ${new Date(
-                range.to
-              ).toLocaleDateString()}`
-            : ""}
+          {ranges
+            .map((r) =>
+              r.to
+                ? `${new Date(r.from).toLocaleDateString()} — ${new Date(
+                    r.to
+                  ).toLocaleDateString()}`
+                : `${new Date(r.from).toLocaleDateString()} — Present`
+            )
+            .join(" • ")}
         </Typography>
       )}
     </>
@@ -239,7 +293,11 @@ export default function UserCard({
               size="small"
               variant="outlined"
               color={color || "primary"}
-              onClick={() => handleAction(label)}
+              onClick={() =>
+                label === "Merge" && onMergeRequest
+                  ? onMergeRequest(user)
+                  : openProfile()
+              }
               startIcon={icon}
             >
               {label}

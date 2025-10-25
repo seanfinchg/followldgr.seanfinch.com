@@ -19,6 +19,7 @@ import {
   sortUsers,
   latestOrderIndexFrom,
 } from "../lib/merge";
+import { mergeUser as utilMergeUser } from "../lib/utils";
 import { loadMerged, saveMerged } from "../lib/storage";
 import { alphaHeader } from "../lib/utils";
 
@@ -34,6 +35,10 @@ interface AppContextType {
   onBaseChosen: (file: LDGRJson) => void;
   onEnterDashboard: () => void;
   onToggleWhitelist: (u: BasicUser) => void;
+  onMergeRequest: (u: BasicUser) => void;
+  onConfirmMerge: (source: BasicUser, targetName: string) => void;
+  onCancelMerge: () => void;
+  mergeSource?: BasicUser | null;
   onWhitelistAll: (filteredUsers: BasicUser[]) => void;
   onDownloadMerged: () => LDGRJson | undefined;
   handleBaseSnapshotChange: (index: number) => void;
@@ -42,7 +47,7 @@ interface AppContextType {
   fileUpload: {
     pendingFiles: File[];
     uploadedFiles: string[];
-    uploading: boolean;
+    uploading?: boolean;
     baseFile: File | null;
     handleFileSelection: (files: FileList | null) => void;
     handleRemoveFile: (fileName: string) => void;
@@ -88,6 +93,10 @@ const AppContext = createContext<AppContextType>({
   onBaseChosen: () => {},
   onEnterDashboard: () => {},
   onToggleWhitelist: () => {},
+  onMergeRequest: () => {},
+  onConfirmMerge: () => {},
+  onCancelMerge: () => {},
+  mergeSource: null,
   onWhitelistAll: () => {},
   onDownloadMerged: () => undefined,
   handleBaseSnapshotChange: () => {},
@@ -128,8 +137,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // File upload state
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
-  const [uploading, setUploading] = useState<boolean>(false);
+  const [uploadedFiles] = useState<string[]>([]);
   const [baseFile, setBaseFile] = useState<File | null>(null);
 
   // Load prior merged base (optional) on mount
@@ -364,7 +372,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     let compareSnapshotIndex = undefined;
 
     if (ui.snapshots.length > 1) {
-      baseSnapshotIndex = 0; // Oldest snapshot
+      // Default to previous snapshot vs most recent snapshot
+      baseSnapshotIndex = ui.snapshots.length - 2; // Previous snapshot
       compareSnapshotIndex = ui.snapshots.length - 1; // Latest snapshot
     }
 
@@ -387,8 +396,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [ui.snapshots, ui.base, rebuildDataset]);
 
   const onToggleWhitelist = useCallback((u: BasicUser) => {
-    if (!ui.dataset) return;
-
+    // Update dataset immutably using the functional setState so we don't
+    // depend on a stale closure over `ui`.
     setUI((prevUI) => {
       if (!prevUI.dataset) return prevUI;
 
@@ -412,6 +421,121 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
       return { ...prevUI, dataset };
     });
   }, []);
+
+  // Merge modal flow: hold source in local state and provide confirm function
+  const [mergeSource, setMergeSource] = useState<BasicUser | null>(null);
+
+  const onMergeRequest = useCallback((source: BasicUser) => {
+    // open modal by setting source
+    setMergeSource(source);
+  }, []);
+
+  const onConfirmMerge = useCallback(
+    (source: BasicUser, targetName: string) => {
+      setUI((prevUI) => {
+        if (!prevUI.dataset) return prevUI;
+        const dataset = { ...prevUI.dataset } as Dataset;
+
+        const sourceKey = (source.username || "").toLowerCase();
+        const targetKey = (targetName || "").toLowerCase();
+
+        const getFromMap = (map: Map<string, BasicUser>, key: string) =>
+          map.get(key);
+
+        const existingTarget =
+          getFromMap(dataset.latestFollowers, targetKey) ||
+          getFromMap(dataset.latestFollowing, targetKey) ||
+          getFromMap(dataset.mutuals, targetKey) ||
+          getFromMap(dataset.notFollowingBack, targetKey) ||
+          getFromMap(dataset.iDontFollowBack, targetKey);
+
+        const existingSource =
+          getFromMap(dataset.latestFollowers, sourceKey) ||
+          getFromMap(dataset.latestFollowing, sourceKey) ||
+          getFromMap(dataset.mutuals, sourceKey) ||
+          getFromMap(dataset.notFollowingBack, sourceKey) ||
+          getFromMap(dataset.iDontFollowBack, sourceKey);
+
+        if (!existingSource) {
+          // nothing to merge
+          return prevUI;
+        }
+
+        const targetUser: BasicUser = existingTarget
+          ? existingTarget
+          : { ...existingSource, username: targetName };
+        const merged = utilMergeUser(targetUser, existingSource);
+
+        const replaceMapEntry = (map: Map<string, BasicUser>) => {
+          const clone = new Map(map);
+          if (clone.has(sourceKey)) clone.delete(sourceKey);
+          clone.set(targetKey, merged);
+          return clone;
+        };
+
+        dataset.latestFollowers = replaceMapEntry(dataset.latestFollowers);
+        dataset.latestFollowing = replaceMapEntry(dataset.latestFollowing);
+        dataset.mutuals = replaceMapEntry(dataset.mutuals);
+        dataset.notFollowingBack = replaceMapEntry(dataset.notFollowingBack);
+        dataset.iDontFollowBack = replaceMapEntry(dataset.iDontFollowBack);
+
+        dataset.mergedSnapshots = dataset.mergedSnapshots.map((snap) => {
+          const newFollowers = (snap.followers || [])
+            .map((u) => (u.username.toLowerCase() === sourceKey ? merged : u))
+            .filter(
+              (v, i, a) =>
+                a.findIndex(
+                  (x) => x.username.toLowerCase() === v.username.toLowerCase()
+                ) === i
+            );
+
+          const newFollowing = (snap.following || [])
+            .map((u) => (u.username.toLowerCase() === sourceKey ? merged : u))
+            .filter(
+              (v, i, a) =>
+                a.findIndex(
+                  (x) => x.username.toLowerCase() === v.username.toLowerCase()
+                ) === i
+            );
+
+          return { ...snap, followers: newFollowers, following: newFollowing };
+        });
+
+        const remapRange = (
+          arr: Array<{ user: BasicUser; from: string; to: string }>
+        ) =>
+          arr
+            .map((it) => ({
+              ...it,
+              user:
+                it.user.username.toLowerCase() === sourceKey ? merged : it.user,
+            }))
+            .reduce(
+              (
+                acc: Array<{ user: BasicUser; from: string; to: string }>,
+                cur
+              ) => {
+                const k = cur.user.username.toLowerCase();
+                const i = acc.findIndex(
+                  (a) => a.user.username.toLowerCase() === k
+                );
+                if (i === -1) acc.push(cur);
+                return acc;
+              },
+              [] as Array<{ user: BasicUser; from: string; to: string }>
+            );
+
+        dataset.lostFollowers = remapRange(dataset.lostFollowers);
+        dataset.unfollowed = remapRange(dataset.unfollowed);
+
+        // close modal by clearing mergeSource
+        setMergeSource(null);
+
+        return { ...prevUI, dataset };
+      });
+    },
+    []
+  );
 
   const onWhitelistAll = useCallback(
     (filteredUsers: BasicUser[]) => {
@@ -457,6 +581,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     onBaseChosen,
     onEnterDashboard,
     onToggleWhitelist,
+    onMergeRequest,
+    onConfirmMerge,
+    onCancelMerge: () => setMergeSource(null),
+    mergeSource,
     onWhitelistAll,
     onDownloadMerged,
     handleBaseSnapshotChange,
@@ -465,7 +593,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     fileUpload: {
       pendingFiles,
       uploadedFiles,
-      uploading,
       baseFile,
       handleFileSelection,
       handleRemoveFile,

@@ -1,68 +1,12 @@
-import React, { useState } from "react";
-import {
-  Box,
-  ToggleButtonGroup,
-  ToggleButton,
-  Typography,
-  Card,
-  CardContent,
-} from "@mui/material";
-import type { Snapshot, BasicUser } from "../types";
-
-// Helper function to calculate order index statistics
-type OrderStats = {
-  min: number;
-  max: number;
-  avg: number;
-  median: number;
-  recentCount: number; // Count of users with order_index < 100
-};
-
-function calculateOrderStats(users?: BasicUser[]): OrderStats | undefined {
-  if (!users || users.length === 0) return undefined;
-
-  const orderIndices = users
-    .map((user) => user.order_index)
-    .filter((index): index is number => index !== undefined);
-
-  if (orderIndices.length === 0) return undefined;
-
-  // Sort for calculations
-  const sorted = [...orderIndices].sort((a, b) => a - b);
-  const min = sorted[0];
-  const max = sorted[sorted.length - 1];
-  const sum = sorted.reduce((acc, val) => acc + val, 0);
-  const avg = sum / sorted.length;
-
-  // Calculate median
-  const mid = Math.floor(sorted.length / 2);
-  const median =
-    sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
-
-  // Count recent users (order_index < 100)
-  const recentCount = sorted.filter((index) => index < 100).length;
-
-  return { min, max, avg, median, recentCount };
-}
+import React from "react";
+import { Box, Typography } from "@mui/material";
+import type { Snapshot } from "../types";
 
 /**
  * Enhanced trend chart with order index statistics.
  */
 export default function TrendChart({ snaps }: { snaps: Snapshot[] }) {
-  const [viewMode, setViewMode] = useState<"trend" | "order" | "stats">(
-    "trend"
-  );
-
   if (!snaps.length) return null;
-
-  const handleViewChange = (
-    _event: React.MouseEvent<HTMLElement>,
-    newMode: "trend" | "order" | "stats" | null
-  ) => {
-    if (newMode !== null) {
-      setViewMode(newMode);
-    }
-  };
 
   const data = snaps.map((s) => ({
     t: new Date(s.timestamp).getTime(),
@@ -70,9 +14,6 @@ export default function TrendChart({ snaps }: { snaps: Snapshot[] }) {
     followers: s.followers?.length || 0,
     following: s.following?.length || 0,
     diff: (s.followers?.length || 0) - (s.following?.length || 0),
-    // Calculate order index statistics
-    followerOrderStats: calculateOrderStats(s.followers),
-    followingOrderStats: calculateOrderStats(s.following),
   }));
 
   const minT = Math.min(...data.map((d) => d.t));
@@ -108,185 +49,14 @@ export default function TrendChart({ snaps }: { snaps: Snapshot[] }) {
   const followerGrowth = lastEntry.followers - firstEntry.followers;
   const followingGrowth = lastEntry.following - firstEntry.following;
   const followerGrowthPct = firstEntry.followers
-    ? ((followerGrowth / firstEntry.followers) * 100).toFixed(1)
+    ? ((followerGrowth / Math.max(1, firstEntry.followers)) * 100).toFixed(1)
     : "0";
   const followingGrowthPct = firstEntry.following
-    ? ((followingGrowth / firstEntry.following) * 100).toFixed(1)
+    ? ((followingGrowth / Math.max(1, firstEntry.following)) * 100).toFixed(1)
     : "0";
-
-  // Render stats view
-  const renderStatsView = () => (
-    <Box sx={{ mb: 3 }}>
-      <Box
-        sx={{
-          display: "flex",
-          flexDirection: { xs: "column", md: "row" },
-          gap: 2,
-        }}
-      >
-        <Card variant="outlined" sx={{ flex: 1 }}>
-          <CardContent>
-            <Typography variant="subtitle1" gutterBottom>
-              Follower Growth
-            </Typography>
-            <Typography
-              variant="h4"
-              color={followerGrowth >= 0 ? "success.main" : "error.main"}
-            >
-              {followerGrowth >= 0 ? "+" : ""}
-              {followerGrowth} ({followerGrowthPct}%)
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              From {firstEntry.followers} to {lastEntry.followers} followers
-            </Typography>
-          </CardContent>
-        </Card>
-
-        <Card variant="outlined" sx={{ flex: 1 }}>
-          <CardContent>
-            <Typography variant="subtitle1" gutterBottom>
-              Following Growth
-            </Typography>
-            <Typography
-              variant="h4"
-              color={followingGrowth >= 0 ? "success.main" : "error.main"}
-            >
-              {followingGrowth >= 0 ? "+" : ""}
-              {followingGrowth} ({followingGrowthPct}%)
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              From {firstEntry.following} to {lastEntry.following} following
-            </Typography>
-          </CardContent>
-        </Card>
-      </Box>
-
-      <Box sx={{ mt: 2 }}>
-        <Card variant="outlined">
-          <CardContent>
-            <Typography variant="subtitle1" gutterBottom>
-              Recent Followers Analysis
-            </Typography>
-            <Box
-              sx={{ display: "flex", flexWrap: "wrap", gap: { xs: 2, md: 3 } }}
-            >
-              <Box sx={{ minWidth: "120px" }}>
-                <Typography variant="body2" color="text.secondary">
-                  Lowest Order Index
-                </Typography>
-                <Typography variant="h6">
-                  {lastEntry.followerOrderStats?.min ?? "N/A"}
-                </Typography>
-              </Box>
-              <Box sx={{ minWidth: "120px" }}>
-                <Typography variant="body2" color="text.secondary">
-                  Average Order Index
-                </Typography>
-                <Typography variant="h6">
-                  {lastEntry.followerOrderStats?.avg.toFixed(1) ?? "N/A"}
-                </Typography>
-              </Box>
-              <Box sx={{ minWidth: "120px" }}>
-                <Typography variant="body2" color="text.secondary">
-                  Recent Followers
-                </Typography>
-                <Typography variant="h6">
-                  {lastEntry.followerOrderStats?.recentCount ?? "N/A"}
-                </Typography>
-              </Box>
-              <Box sx={{ minWidth: "120px" }}>
-                <Typography variant="body2" color="text.secondary">
-                  Median Order
-                </Typography>
-                <Typography variant="h6">
-                  {lastEntry.followerOrderStats?.median.toFixed(0) ?? "N/A"}
-                </Typography>
-              </Box>
-            </Box>
-          </CardContent>
-        </Card>
-      </Box>
-    </Box>
-  );
-
-  // Render order analysis view
-  const renderOrderView = () => (
-    <Box sx={{ mb: 3 }}>
-      <Typography variant="subtitle1" gutterBottom>
-        Order Index Interpretation
-      </Typography>
-      <Typography variant="body2" sx={{ mb: 2 }}>
-        Lower order indices mean more recent followers/following. Here's how
-        your account's order indices are distributed:
-      </Typography>
-
-      <Box
-        sx={{
-          display: "flex",
-          flexDirection: { xs: "column", md: "row" },
-          gap: 2,
-        }}
-      >
-        <Card variant="outlined" sx={{ flex: 1 }}>
-          <CardContent>
-            <Typography variant="subtitle1">Follower Recency</Typography>
-            <Typography variant="body2" sx={{ mb: 2 }}>
-              {lastEntry.followerOrderStats?.recentCount ?? 0} of your followers
-              have an order index below 100, indicating they followed you
-              relatively recently.
-            </Typography>
-            <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Most Recent
-                </Typography>
-                <Typography variant="body2">
-                  Index: {lastEntry.followerOrderStats?.min ?? "N/A"}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Least Recent
-                </Typography>
-                <Typography variant="body2">
-                  Index: {lastEntry.followerOrderStats?.max ?? "N/A"}
-                </Typography>
-              </Box>
-            </Box>
-          </CardContent>
-        </Card>
-
-        <Card variant="outlined" sx={{ flex: 1 }}>
-          <CardContent>
-            <Typography variant="subtitle1">Following Recency</Typography>
-            <Typography variant="body2" sx={{ mb: 2 }}>
-              {lastEntry.followingOrderStats?.recentCount ?? 0} of the people
-              you follow have an order index below 100, indicating you followed
-              them relatively recently.
-            </Typography>
-            <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Most Recent
-                </Typography>
-                <Typography variant="body2">
-                  Index: {lastEntry.followingOrderStats?.min ?? "N/A"}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Least Recent
-                </Typography>
-                <Typography variant="body2">
-                  Index: {lastEntry.followingOrderStats?.max ?? "N/A"}
-                </Typography>
-              </Box>
-            </Box>
-          </CardContent>
-        </Card>
-      </Box>
-    </Box>
-  );
+  // Index/order statistics are backend-only. The chart below shows trends
+  // for follower/following counts; deeper index analysis has been removed
+  // from the UI per current requirements.
 
   // Render trend chart
   const renderTrendChart = () => (
@@ -553,23 +323,11 @@ export default function TrendChart({ snaps }: { snaps: Snapshot[] }) {
         }}
       >
         <Typography variant="h6" component="h2">
-          Follower & Following Analytics
+          Follower & Following Trends
         </Typography>
-        <ToggleButtonGroup
-          value={viewMode}
-          exclusive
-          onChange={handleViewChange}
-          size="small"
-        >
-          <ToggleButton value="trend">Trend Chart</ToggleButton>
-          <ToggleButton value="order">Order Analysis</ToggleButton>
-          <ToggleButton value="stats">Statistics</ToggleButton>
-        </ToggleButtonGroup>
       </Box>
 
-      {viewMode === "stats" && renderStatsView()}
-      {viewMode === "order" && renderOrderView()}
-      {viewMode === "trend" && renderTrendView()}
+      {renderTrendView()}
     </div>
   );
 }

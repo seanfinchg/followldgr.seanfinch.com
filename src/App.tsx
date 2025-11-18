@@ -16,6 +16,7 @@ import Controls from "./components/Controls";
 import UserList from "./components/UserList";
 import TrendChart from "./components/TrendChart";
 import OrderStatsSummary from "./components/OrderStatsSummary";
+import UserProfile from "./components/UserProfile";
 
 import type { CategoryKey } from "./types";
 import { clamp } from "./lib/utils";
@@ -39,6 +40,14 @@ export default function App() {
 
 // The actual app content, now using the context
 function AppContent() {
+  // Simple client-side routing: if path is /user/:username show profile page
+  const pathname =
+    typeof window !== "undefined" ? window.location.pathname : "/";
+  if (pathname.startsWith("/user/")) {
+    const parts = pathname.split("/");
+    const username = decodeURIComponent(parts[2] || "");
+    return <UserProfile username={username} />;
+  }
   const {
     ui,
     setUI,

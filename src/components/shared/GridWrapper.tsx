@@ -28,9 +28,17 @@ export const GridItem: React.FC<
     xl?: number;
   }>
 > = ({ children, ...props }) => {
+  // Render a block-level container that spans the requested columns in CSS grid
+  // This keeps children (like lists/cards) at full width of the available column area.
+  const span = props.xs || 12;
   return (
     <div
-      style={{ gridColumn: `span ${props.xs || 12} / span ${props.xs || 12}` }}
+      style={{
+        display: "block",
+        width: "100%",
+        boxSizing: "border-box",
+        gridColumn: `span ${span} / span ${span}`,
+      }}
     >
       {children}
     </div>

@@ -1,21 +1,9 @@
-import {
-  Card,
-  CardContent,
-  Typography,
-  Box,
-  Chip,
-  Tooltip,
-} from "@mui/material";
-import { AccessTime, InsertChart, Insights, People } from "@mui/icons-material";
+import { Card, CardContent, Typography, Box, Chip } from "@mui/material";
+import { InsertChart, People } from "@mui/icons-material";
 import type { Snapshot } from "../types";
 
-type Stats = {
-  mostRecent: number;
-  leastRecent: number;
-  avg: number;
-  recentCount: number;
-  totalCount: number;
-};
+/* order-index stats removed from the UI (backend-only)
+   kept the component to show a lightweight, non-index summary */
 
 type OrderStatsSummaryProps = {
   snapshots: Snapshot[];
@@ -35,80 +23,35 @@ export default function OrderStatsSummary({
 
   if (!userList || userList.length === 0) return null;
 
-  // Calculate stats based on order_index
-  const orderIndices = userList
-    .map((user) => user.order_index)
-    .filter((index): index is number => index !== undefined);
-
-  if (orderIndices.length === 0) return null;
-
-  // Sort for calculations
-  const sorted = [...orderIndices].sort((a, b) => a - b);
-  const mostRecent = sorted[0]; // Lowest index = most recent
-  const leastRecent = sorted[sorted.length - 1]; // Highest index = least recent
-  const sum = sorted.reduce((acc, val) => acc + val, 0);
-  const avg = sum / sorted.length;
-  const recentCount = sorted.filter((index) => index < 100).length;
-
-  const stats: Stats = {
-    mostRecent,
-    leastRecent,
-    avg,
-    recentCount,
-    totalCount: orderIndices.length,
-  };
-
-  const title = type === "followers" ? "Follower" : "Following";
+  // The UI should not expose order indices (backend-only). Show a minimal
+  //, non-order-based summary instead.
+  const totalCount = userList.length;
+  const title = type === "followers" ? "Followers" : "Following";
 
   return (
     <Card variant="outlined" sx={{ mb: 2 }}>
       <CardContent>
-        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
           <People color="primary" sx={{ mr: 1 }} />
-          <Typography variant="h6">{title} Order Statistics</Typography>
+          <Typography variant="h6">{title} Summary</Typography>
         </Box>
 
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Lower order indices indicate more recent {type}. This data helps you
-          understand the chronology of your Instagram relationships.
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          A lightweight summary — index/order statistics are hidden because they
+          are backend-only metrics.
         </Typography>
 
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-          <Tooltip title="The lowest order index in your list - this is your most recent relationship">
-            <Chip
-              icon={<AccessTime />}
-              label={`Most Recent: ${stats.mostRecent}`}
-              color="primary"
-              variant="outlined"
-            />
-          </Tooltip>
-
-          <Tooltip title="The highest order index in your list - this is your oldest relationship">
-            <Chip
-              icon={<AccessTime />}
-              label={`Oldest: ${stats.leastRecent}`}
-              color="default"
-              variant="outlined"
-            />
-          </Tooltip>
-
-          <Tooltip title="The average order index across all relationships">
-            <Chip
-              icon={<InsertChart />}
-              label={`Average Index: ${stats.avg.toFixed(1)}`}
-              color="default"
-              variant="outlined"
-            />
-          </Tooltip>
-
-          <Tooltip title="Number of relationships with an order index under 100 (relatively recent)">
-            <Chip
-              icon={<Insights />}
-              label={`Recent (< 100): ${stats.recentCount} of ${stats.totalCount}`}
-              color="success"
-              variant="outlined"
-            />
-          </Tooltip>
+        <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+          <Chip
+            icon={<People />}
+            label={`Total: ${totalCount}`}
+            variant="outlined"
+          />
+          <Chip
+            icon={<InsertChart />}
+            label={`Snapshots: ${snapshots.length}`}
+            variant="outlined"
+          />
         </Box>
       </CardContent>
     </Card>

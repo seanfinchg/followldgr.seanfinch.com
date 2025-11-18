@@ -15,8 +15,6 @@ import {
   Lock,
   Star,
   PersonAddAlt,
-  PersonRemove,
-  HighlightOff,
   AccessTime,
   Insights,
   MergeType,
@@ -41,8 +39,11 @@ const UserStatusIndicators = ({ user }: { user: BasicUser }) => (
       display: "flex",
       alignItems: "center",
       gap: 1,
-      flexWrap: "wrap",
+      flexWrap: "nowrap",
       width: "100%",
+      overflowX: "auto",
+      // Ensure children don't force container to grow and can be ellipsized
+      whiteSpace: "nowrap",
     }}
   >
     <a
@@ -60,11 +61,22 @@ const UserStatusIndicators = ({ user }: { user: BasicUser }) => (
       @{user.username}
     </a>
     {user.is_verified && (
-      <Chip size="small" icon={<Verified />} label="Verified" />
+      <Chip
+        size="small"
+        icon={<Verified />}
+        label="Verified"
+        sx={{ maxWidth: 240, textOverflow: "ellipsis", overflow: "hidden" }}
+      />
     )}
     {user.is_private && <Chip size="small" icon={<Lock />} label="Private" />}
     {user.whitelisted && (
-      <Chip size="small" icon={<Star />} label="Whitelisted" color="success" />
+      <Chip
+        size="small"
+        icon={<Star />}
+        label="Whitelisted"
+        color="success"
+        sx={{ maxWidth: 240, textOverflow: "ellipsis", overflow: "hidden" }}
+      />
     )}
   </Box>
 );
@@ -84,50 +96,17 @@ export default function UserCard({
     category === "notFollowingBack" || category === "iDontFollowBack";
 
   // Generate relationship-based actions
+  // Only keep safe, non-destructive actions in the UI.
+  // Destructive actions like Unfollow / Remove follower require backend integration
+  // with Instagram which this app doesn't implement — omit them from the buttons.
   const actions: Array<{
     label: string;
     icon: React.ReactNode;
     color?: "primary" | "error" | "success";
-  }> = [];
-
-  if (
-    category === "following" ||
-    category === "notFollowingBack" ||
-    category === "mutuals"
-  ) {
-    actions.push({
-      label: "Unfollow",
-      icon: <PersonRemove fontSize="small" />,
-      color: "error",
-    });
-  }
-
-  if (
-    category === "followers" ||
-    category === "iDontFollowBack" ||
-    category === "mutuals"
-  ) {
-    actions.push({
-      label: "Remove follower",
-      icon: <HighlightOff fontSize="small" />,
-      color: "error",
-    });
-  }
-
-  if (category === "lostFollowers" || category === "iDontFollowBack") {
-    actions.push({
-      label: "Follow",
-      icon: <PersonAddAlt fontSize="small" />,
-      color: "primary",
-    });
-  }
-
-  // Merge action available on all categories
-  actions.push({
-    label: "Merge",
-    icon: <MergeType fontSize="small" />,
-    color: "primary",
-  });
+  }> = [
+    // Merge action available on all categories (keeps existing behavior)
+    { label: "Merge", icon: <MergeType fontSize="small" />, color: "primary" },
+  ];
 
   // Open profile in a new tab
   const openProfile = () => {
@@ -141,18 +120,8 @@ export default function UserCard({
       <Typography noWrap variant="body2" color="text.secondary">
         {user.full_name ?? ""}
       </Typography>
-
       <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-        {user.order_index !== undefined && (
-          <Tooltip title="Lower index means more recent. This represents how recently the user followed you or you followed them.">
-            <Chip
-              size="small"
-              icon={<AccessTime fontSize="small" />}
-              label={`Index: ${user.order_index}`}
-              color={user.order_index < 100 ? "primary" : "default"}
-            />
-          </Tooltip>
-        )}
+        {/* order_index / index is an internal backend metric — do not show in the UI */}
         {user.first_seen && (
           <Tooltip title="First time user appeared in your snapshots">
             <Chip
@@ -161,6 +130,11 @@ export default function UserCard({
               label={`First seen: ${new Date(
                 user.first_seen
               ).toLocaleDateString()}`}
+              sx={{
+                maxWidth: 260,
+                textOverflow: "ellipsis",
+                overflow: "hidden",
+              }}
             />
           </Tooltip>
         )}
@@ -172,7 +146,8 @@ export default function UserCard({
               display: "flex",
               gap: 1,
               alignItems: "center",
-              flexWrap: "wrap",
+              overflowX: "auto",
+              whiteSpace: "nowrap",
             }}
           >
             {ranges.map((interval, i) => (
@@ -201,6 +176,11 @@ export default function UserCard({
                         ).toLocaleDateString()} — Present`
                   }
                   color={interval.to ? "warning" : "success"}
+                  sx={{
+                    maxWidth: 300,
+                    textOverflow: "ellipsis",
+                    overflow: "hidden",
+                  }}
                 />
               </Tooltip>
             ))}
@@ -287,6 +267,7 @@ export default function UserCard({
             flexShrink: 0,
           }}
         >
+          {/* Merge button */}
           {actions.map(({ label, icon, color }) => (
             <Button
               key={label}
@@ -303,6 +284,8 @@ export default function UserCard({
               {label}
             </Button>
           ))}
+
+          {/* Whitelist toggle (safe) */}
           {canWhitelist && (
             <Button
               size="small"
@@ -314,6 +297,33 @@ export default function UserCard({
               {user.whitelisted ? "Un-whitelist" : "Whitelist"}
             </Button>
           )}
+
+          {/* Clear profile actions */}
+          <Button
+            size="small"
+            variant="outlined"
+            color="primary"
+            onClick={() => openProfile()}
+            startIcon={<PersonAddAlt fontSize="small" />}
+            title="Open on Instagram"
+          >
+            Open on Instagram
+          </Button>
+
+          <Button
+            size="small"
+            variant="contained"
+            color="primary"
+            onClick={() =>
+              (window.location.href = `/user/${encodeURIComponent(
+                user.username
+              )}`)
+            }
+            startIcon={<Insights fontSize="small" />}
+            title="Open profile on Followldgr"
+          >
+            View on Followldgr
+          </Button>
         </Box>
       </CardContent>
     </Card>

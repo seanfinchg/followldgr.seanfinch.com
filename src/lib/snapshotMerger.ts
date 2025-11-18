@@ -1,4 +1,4 @@
-import { LDGRJson, BasicUser, Snapshot } from "../types";
+import type { LDGRJson, BasicUser } from "../types";
 
 /**
  * Convert username to lowercase for key comparisons
@@ -7,22 +7,12 @@ export const toKey = (username: string): string => {
   return (username || "").toLowerCase();
 };
 
-/**
- * Interface to track attribute changes over time
- */
-interface AttributeChange {
-  attribute: string;
-  oldValue: any;
-  newValue: any;
-  changed_at: string;
-}
+// AttributeChange removed (not referenced) to avoid unused-type warnings
 
 /**
  * Extended BasicUser interface with additional tracking properties
  */
-interface EnrichedUser extends BasicUser {
-  attributeHistory?: Record<string, AttributeChange[]>;
-}
+// EnrichedUser was removed because it was not used; BasicUser covers the runtime shape.
 
 /**
  * Generate a v4-like UUID (not cryptographically secure, but sufficient for our needs)

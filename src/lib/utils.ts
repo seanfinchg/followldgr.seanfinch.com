@@ -16,15 +16,27 @@ export const alphaHeader = (username: string) =>
 
 // Merge a → b shallowly but preserve truthy values in b (b wins)
 export const mergeUser = (a: BasicUser, b: BasicUser): BasicUser => {
-  const aliases = new Set<string>([...(a.aliases ?? []), ...(b.aliases ?? [])]);
+  // aliases are stored as AliasEntry[]; map to usernames for set operations
+  const aAliases = (a.aliases ?? []).map((x) => x.username);
+  const bAliases = (b.aliases ?? []).map((x) => x.username);
+
+  const aliasSet = new Set<string>([...aAliases, ...bAliases]);
   if (a.username !== b.username) {
-    aliases.add(a.username);
-    aliases.add(b.username);
+    aliasSet.add(a.username);
+    aliasSet.add(b.username);
   }
+
+  // Map back to AliasEntry[]; use ISO timestamp for changed_at when not available
+  const now = new Date().toISOString();
+  const mergedAliases = Array.from(aliasSet).map((u) => ({
+    username: u,
+    changed_at: now,
+  }));
+
   return {
     ...a,
     ...b,
-    aliases: Array.from(aliases),
+    aliases: mergedAliases,
     // Don't inherit whitelisted status from base if snapshot doesn't have it
     // whitelisted: b.whitelisted ?? a.whitelisted,
     first_seen: a.first_seen ?? b.first_seen,

@@ -1,7 +1,5 @@
 import {
   Box,
-  Tabs,
-  Tab,
   TextField,
   FormControl,
   InputLabel,
@@ -72,31 +70,7 @@ export default function Sidebar({
 }: Props) {
   if (!visible) return null;
 
-  const TabItem = (label: string, value: CategoryKey) => (
-    <Tab
-      label={
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 1,
-            width: "100%",
-          }}
-        >
-          <span>{label}</span>
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ fontWeight: 600 }}
-          >
-            {counts[value] ?? 0}
-          </Typography>
-        </Box>
-      }
-      value={value}
-      sx={{ alignItems: "flex-start" }}
-    />
-  );
+  // TabItem helper removed: replaced tabs with a compact Select to save space
 
   return (
     <Box
@@ -122,43 +96,188 @@ export default function Sidebar({
         </Typography>
       </Stack>
 
-      <Tabs
-        orientation="vertical"
-        value={category}
-        onChange={(_, val) => onCategory(val)}
-        variant="scrollable"
-        sx={{
-          borderRight: 1,
-          borderColor: "divider",
-          width: "100%", // Take full width
-          minWidth: { xs: "100%", sm: 280 }, // Wider on larger screens
-          height: { xs: 350, sm: 420 }, // Taller on larger screens
-          "& .MuiTab-root": {
-            minHeight: 56,
-            padding: "10px 16px",
-            justifyContent: "flex-start",
-            textAlign: "left",
-          },
-        }}
-      >
-        {TabItem("Followers", "followers")}
-        {TabItem("Following", "following")}
-        {TabItem("Mutuals", "mutuals")}
-        {TabItem("Not following back", "notFollowingBack")}
-        {TabItem("I don't follow back", "iDontFollowBack")}
-
-        <Divider
-          textAlign="left"
-          sx={{ my: 1, fontWeight: "bold", fontSize: "0.8rem" }}
+      {/* Compact category selector: use a single Select instead of large vertical tabs
+          This reduces the vertical space used by the sidebar while keeping counts */}
+      <FormControl size="small" fullWidth>
+        <InputLabel>Category</InputLabel>
+        <Select
+          value={category}
+          label="Category"
+          onChange={(e) => onCategory(e.target.value as CategoryKey)}
         >
-          {dataset?.selectedComparison ? "Snapshot Comparisons" : "History"}
-        </Divider>
+          <MenuItem value={"followers"}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                width: "100%",
+              }}
+            >
+              <span>Followers</span>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 600 }}
+              >
+                {counts.followers ?? 0}
+              </Typography>
+            </Box>
+          </MenuItem>
+          <MenuItem value={"following"}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                width: "100%",
+              }}
+            >
+              <span>Following</span>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 600 }}
+              >
+                {counts.following ?? 0}
+              </Typography>
+            </Box>
+          </MenuItem>
+          <MenuItem value={"mutuals"}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                width: "100%",
+              }}
+            >
+              <span>Mutuals</span>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 600 }}
+              >
+                {counts.mutuals ?? 0}
+              </Typography>
+            </Box>
+          </MenuItem>
+          <MenuItem value={"notFollowingBack"}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                width: "100%",
+              }}
+            >
+              <span>Not following back</span>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 600 }}
+              >
+                {counts.notFollowingBack ?? 0}
+              </Typography>
+            </Box>
+          </MenuItem>
+          <MenuItem value={"iDontFollowBack"}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                width: "100%",
+              }}
+            >
+              <span>I don't follow back</span>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 600 }}
+              >
+                {counts.iDontFollowBack ?? 0}
+              </Typography>
+            </Box>
+          </MenuItem>
 
-        {TabItem("Lost followers", "lostFollowers")}
-        {TabItem("Unfollowed users", "unfollowed")}
-        {TabItem("New followers", "newFollowers")}
-        {TabItem("New following", "newFollowing")}
-      </Tabs>
+          <Divider sx={{ my: 1 }} />
+
+          {dataset?.selectedComparison ? (
+            <MenuItem disabled>Snapshot Comparisons</MenuItem>
+          ) : (
+            <MenuItem disabled>History</MenuItem>
+          )}
+
+          <MenuItem value={"lostFollowers"}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                width: "100%",
+              }}
+            >
+              <span>Lost followers</span>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 600 }}
+              >
+                {counts.lostFollowers ?? 0}
+              </Typography>
+            </Box>
+          </MenuItem>
+          <MenuItem value={"unfollowed"}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                width: "100%",
+              }}
+            >
+              <span>Unfollowed users</span>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 600 }}
+              >
+                {counts.unfollowed ?? 0}
+              </Typography>
+            </Box>
+          </MenuItem>
+          <MenuItem value={"newFollowers"}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                width: "100%",
+              }}
+            >
+              <span>New followers</span>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 600 }}
+              >
+                {counts.newFollowers ?? 0}
+              </Typography>
+            </Box>
+          </MenuItem>
+          <MenuItem value={"newFollowing"}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                width: "100%",
+              }}
+            >
+              <span>New following</span>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 600 }}
+              >
+                {counts.newFollowing ?? 0}
+              </Typography>
+            </Box>
+          </MenuItem>
+        </Select>
+      </FormControl>
 
       <TextField
         label="Search"

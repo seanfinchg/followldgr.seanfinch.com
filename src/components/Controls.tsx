@@ -48,27 +48,22 @@ export default function Controls({
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mb: 2 }}>
       <Box
-        sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}
+        sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}
       >
-        <FormControl size="medium" sx={{ minWidth: 280 }}>
+        <FormControl size="small" sx={{ minWidth: 160, maxWidth: 220 }}>
           <InputLabel>Sort</InputLabel>
           <Select<SortMode>
             value={sort}
             label="Sort"
             onChange={(e) => onSort(e.target.value as SortMode)}
           >
-            <MenuItem value="chronoNewest">
-              Chronological — Newest first (Low Index)
-            </MenuItem>
-            <MenuItem value="chrono">
-              Chronological — Oldest first (High Index)
-            </MenuItem>
-            <MenuItem value="alpha">Alphabetical A–Z</MenuItem>
-            <MenuItem value="alphaDesc">Alphabetical Z–A</MenuItem>
+            <MenuItem value="chronoNewest">Chrono — Newest</MenuItem>
+            <MenuItem value="chrono">Chrono — Oldest</MenuItem>
+            <MenuItem value="alpha">A → Z</MenuItem>
+            <MenuItem value="alphaDesc">Z → A</MenuItem>
           </Select>
         </FormControl>
-
-        <FormControl size="medium" sx={{ minWidth: 180 }}>
+        <FormControl size="small" sx={{ minWidth: 120, maxWidth: 160 }}>
           <InputLabel>Per page</InputLabel>
           <Select<number>
             value={pageSize}

@@ -148,6 +148,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
+  // Keep a minimal history state so browser back/forward preserves upload/dashboard step.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // Replace initial state with our step so popstate has something
+    try {
+      window.history.replaceState({ step: ui.step }, "", window.location.href);
+    } catch (e) {
+      // ignore if history not available
+    }
+
+    const onPop = (ev: PopStateEvent) => {
+      const s = (ev.state && (ev.state as any).step) || "upload";
+      setUI((prev) => ({ ...prev, step: s }));
+    };
+
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // File upload handlers
   const handleFileSelection = useCallback(
     (files: FileList | null) => {
@@ -386,6 +406,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     );
 
     // Switch to dashboard with snapshot comparison
+    // push history entry so Back returns to upload while preserving JS state
+    if (typeof window !== "undefined") {
+      try {
+        window.history.pushState(
+          { step: "dashboard" },
+          "",
+          window.location.href
+        );
+      } catch (e) {
+        // ignore
+      }
+    }
     setUI((p) => ({
       ...p,
       step: "dashboard",
